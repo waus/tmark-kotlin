@@ -1,0 +1,29 @@
+# Gradle and Kotlin caches and build outputs
+.gradle/
+.kotlin/
+**/build/
+
+# Local Android SDK, native builds and profiler captures
+local.properties
+.cxx/
+.externalNativeBuild/
+captures/
+*.hprof
+hs_err_pid*.log
+
+# Local signing configuration and private signing keys
+keystore.properties
+*.jks
+*.keystore
+
+.idea/
+.vscode/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+node_modules/
+kotlin-js-store/
+__pycache__/
+*.pyc

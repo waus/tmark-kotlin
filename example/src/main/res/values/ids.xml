@@ -1,0 +1,5 @@
+<resources>
+    <item name="article" type="id" />
+    <item name="document_picker" type="id" />
+    <item name="article_scroll" type="id" />
+</resources>
