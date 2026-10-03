@@ -1,4 +1,4 @@
-plugins { kotlin("multiplatform"); id("com.vanniktech.maven.publish") }
+plugins { kotlin("multiplatform"); id("com.vanniktech.maven.publish"); signing }
 kotlin {
     jvm {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
@@ -14,9 +14,7 @@ kotlin {
 mavenPublishing {
     coordinates(group.toString(), "core", version.toString())
     publishToMavenCentral()
-    if (providers.gradleProperty("signingInMemoryKey").isPresent || providers.gradleProperty("signing.secretKeyRingFile").isPresent) {
-        signAllPublications()
-    }
+    signAllPublications()
     pom {
         name = "TMark Kotlin Core"
         description = "Kotlin Multiplatform parser and serializer for TMark documents"
@@ -28,5 +26,11 @@ mavenPublishing {
             connection = "scm:git:https://github.com/waus/tmark-kotlin.git"
             developerConnection = "scm:git:ssh://git@github.com/waus/tmark-kotlin.git"
         }
+    }
+}
+
+signing {
+    if (!providers.gradleProperty("signingInMemoryKey").isPresent) {
+        useGpgCmd()
     }
 }

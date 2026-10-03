@@ -1,4 +1,4 @@
-plugins { id("com.android.library"); id("org.jetbrains.kotlin.plugin.compose"); id("com.vanniktech.maven.publish") }
+plugins { id("com.android.library"); id("org.jetbrains.kotlin.plugin.compose"); id("com.vanniktech.maven.publish"); signing }
 android {
     namespace = "app.tmark.android"
     compileSdk = 35
@@ -21,9 +21,7 @@ dependencies {
 mavenPublishing {
     coordinates(group.toString(), "android", version.toString())
     publishToMavenCentral()
-    if (providers.gradleProperty("signingInMemoryKey").isPresent || providers.gradleProperty("signing.secretKeyRingFile").isPresent) {
-        signAllPublications()
-    }
+    signAllPublications()
     pom {
         name = "TMark Android"
         description = "Native Android Views for TMark documents"
@@ -35,5 +33,11 @@ mavenPublishing {
             connection = "scm:git:https://github.com/waus/tmark-kotlin.git"
             developerConnection = "scm:git:ssh://git@github.com/waus/tmark-kotlin.git"
         }
+    }
+}
+
+signing {
+    if (!providers.gradleProperty("signingInMemoryKey").isPresent) {
+        useGpgCmd()
     }
 }
