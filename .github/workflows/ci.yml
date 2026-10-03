@@ -28,7 +28,21 @@ jobs:
             :android:lintDebug :android:assembleRelease \
             :example:lintDebug :example:assembleDebug
       - name: Verify published artifacts
+        env:
+          GNUPGHOME: ${{ runner.temp }}/tmark-ci-gnupg
         run: |
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          gpg --batch --generate-key <<'EOF'
+          Key-Type: RSA
+          Key-Length: 3072
+          Key-Usage: sign
+          Name-Real: TMark CI
+          Name-Email: ci@example.invalid
+          Expire-Date: 1d
+          %no-protection
+          %commit
+          EOF
           ./gradlew :core:publishToMavenLocal :android:publishToMavenLocal \
             -Dmaven.repo.local="$RUNNER_TEMP/tmark-m2"
           python3 .github/scripts/check_publications.py "$RUNNER_TEMP/tmark-m2"
