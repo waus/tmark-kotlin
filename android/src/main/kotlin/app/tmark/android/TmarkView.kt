@@ -301,7 +301,11 @@ class TmarkView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
 
     private fun slideshow(node: Slideshow, path: String): View = column().apply {
         if (node.children.isNotEmpty()) {
-            addView(SlideshowSizeFrame(context, node.children.map { (it as? ImageNode)?.src }, contentLoader).apply {
+            addView(SlideshowSizeFrame(context, node.children.map { when (it) {
+                is ImageNode -> it.src
+                is VideoNode -> it.preview
+                else -> null
+            } }, contentLoader).apply {
                 val sizeFrame = this
                 addView(ComposeView(context).apply {
                     setContent {
@@ -337,7 +341,7 @@ class TmarkView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
                 is VideoNode -> {
                     fun showVideo() {
                         tile.removeAllViews()
-                        tile.addView(NativeVideoView(context, node.src, contentLoader, config.onError, true), FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+                        tile.addView(NativeVideoView(context, node.src, contentLoader, node.preview, node.loop, config.onError, true, onImageSize, cropImage), FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
                     }
                     if (node.hasSpoiler && !state.getBoolean("$path/revealed")) {
                         addView(MaterialButton(context).apply {
@@ -371,7 +375,7 @@ class TmarkView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
             holder.removeAllViews()
             holder.addView(when {
                 node is ImageNode -> imageView(node, path)
-                node is VideoNode -> NativeVideoView(context, src, contentLoader, config.onError)
+                node is VideoNode -> NativeVideoView(context, src, contentLoader, node.preview, node.loop, config.onError)
                 else -> NativeAudioView(context, src, contentLoader, config.onError)
             })
         }

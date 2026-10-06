@@ -13,7 +13,7 @@
 {slideshow;
 #caption{Image and video slideshow}
 {img;https://tmark.waus.app/static/mountains-hero.webp}
-{video;#has_spoiler{t}https://tmark.waus.app/static/Big_Buck_Bunny_720_10s_1MB.mp4}
+{video;#has_spoiler{t}#preview{https://tmark.waus.app/static/mountains-hero.webp}https://tmark.waus.app/static/Big_Buck_Bunny_720_10s_1MB.mp4}
 {img;https://tmark.waus.app/static/mountains-rockies.webp}
 }
 {audio;#caption{Audio}https://tmark.waus.app/static/mountain-ambient.mp3}

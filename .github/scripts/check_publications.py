@@ -6,14 +6,18 @@ from zipfile import ZipFile
 
 
 repository = Path(sys.argv[1]) / "app" / "waus" / "tmark"
+core_versions = [path.name for path in (repository / "core").iterdir() if path.is_dir()]
+if len(core_versions) != 1:
+    raise SystemExit(f"Expected one core version, found: {core_versions}")
+version = core_versions[0]
 expected = {
-    "core": "core-0.1.0.module",
-    "core-jvm": "core-jvm-0.1.0.jar",
-    "android": "android-0.1.0.aar",
+    "core": f"core-{version}.module",
+    "core-jvm": f"core-jvm-{version}.jar",
+    "android": f"android-{version}.aar",
 }
 
 for module, filename in expected.items():
-    artifact = repository / module / "0.1.0" / filename
+    artifact = repository / module / version / filename
     if not artifact.is_file():
         raise SystemExit(f"Missing publication: {artifact}")
 

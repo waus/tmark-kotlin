@@ -2,6 +2,7 @@ package app.tmark.android
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.app.Dialog
 import android.content.res.ColorStateList
 import android.content.res.Resources
 import android.graphics.Bitmap
@@ -267,87 +268,182 @@ internal fun decodeBitmap(bytes: ByteArray, maxDimension: Int): Bitmap {
 private val imageExecutor = Executors.newFixedThreadPool(3)
 private val mainHandler = Handler(Looper.getMainLooper())
 
+private fun mediaIconButton(context: Context, icon: Int, label: Int) = ImageButton(context).apply {
+    setImageDrawable(AppCompatResources.getDrawable(context, icon))
+    imageTintList = ColorStateList.valueOf(MaterialColors.getColor(this, MaterialR.attr.colorOnSurface))
+    contentDescription = context.getString(label)
+    scaleType = ImageView.ScaleType.CENTER
+    val ripple = TypedValue()
+    context.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)
+    setBackgroundResource(ripple.resourceId)
+}
+
+private fun circularPlayButton(context: Context) = mediaIconButton(context, R.drawable.tmark_audio_play, R.string.tmark_play).apply {
+    val primary = MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary)
+    val onPrimary = MaterialColors.getColor(this, MaterialR.attr.colorOnPrimary)
+    imageTintList = ColorStateList.valueOf(onPrimary)
+    background = RippleDrawable(
+        ColorStateList.valueOf((onPrimary and 0x00ffffff) or 0x33000000),
+        GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(primary) },
+        GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE) },
+    )
+}
+
 @SuppressLint("ViewConstructor") // Internal, programmatically constructed widgets.
 internal class NativeVideoView(context: Context, private val source: String, private val loader: MediaContentLoader,
-                               private val onError: ((Throwable) -> Unit)?, fillBounds: Boolean = false) : LinearLayout(context) {
-    private val video = VideoView(context)
-    private val play = MaterialButton(context).apply { setText(R.string.tmark_play) }
-    private var position = 0
-    private var prepared = false
+                               private val preview: String, private val loop: Boolean,
+                               private val onError: ((Throwable) -> Unit)?, fillBounds: Boolean = false,
+                               onImageSize: ((Int, Int) -> Unit)? = null,
+                               cropToBounds: Boolean = fillBounds) : FrameLayout(context) {
+    private var previewLoaded = false
+    private val image = NativeImageView(context, preview, loader, onError, fillBounds = fillBounds,
+        onImageSize = { width, height ->
+            previewLoaded = true
+            onImageSize?.invoke(width, height)
+            if (loop && isAttachedToWindow) startLoop()
+        }, cropToBounds = cropToBounds)
+    private val video = if (loop) VideoView(context).apply { visibility = INVISIBLE } else null
     private var work: Future<*>? = null
     private var file: java.io.File? = null
     private var generation = 0
     init {
-        orientation = VERTICAL
-        if (fillBounds) {
-            addView(FrameLayout(context).apply {
-                addView(video, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-                addView(play, FrameLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
-            }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        } else {
-            addView(video, LayoutParams(LayoutParams.MATCH_PARENT, (220 * resources.displayMetrics.density).toInt()))
-            addView(play)
+        addView(image, LayoutParams(LayoutParams.MATCH_PARENT, if (fillBounds) LayoutParams.MATCH_PARENT else LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+        video?.let { playerView ->
+            addView(playerView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            playerView.setOnPreparedListener { player ->
+                player.isLooping = true
+                player.setVolume(0f, 0f)
+                playerView.visibility = VISIBLE
+                image.visibility = INVISIBLE
+                syncPlayback()
+            }
+            playerView.setOnErrorListener { _, what, extra ->
+                playerView.visibility = INVISIBLE
+                image.visibility = VISIBLE
+                file?.delete(); file = null
+                onError?.invoke(IllegalStateException("Video error $what/$extra"))
+                true
+            }
         }
-        video.setMediaController(MediaController(context).apply { setAnchorView(video) })
-        video.setOnPreparedListener {
-            prepared = true
-            if (position > 0) video.seekTo(position)
-            if (!isShown || windowVisibility != View.VISIBLE) video.pause()
+        if (!loop) circularPlayButton(context).let { button ->
+            val size = (48 * resources.displayMetrics.density + 0.5f).toInt()
+            addView(button, LayoutParams(size, size, android.view.Gravity.CENTER))
+            button.setOnClickListener { showVideoDialog(context, source, loader, onError) }
         }
-        video.setOnErrorListener { _, what, extra ->
-            prepared = false; file?.delete(); file = null
-            play.setText(R.string.tmark_media_unavailable)
-            onError?.invoke(IllegalStateException("Video error $what/$extra"))
-            true
-        }
-        play.setOnClickListener {
-            if (prepared) video.start()
-            else if (work == null) {
-                val token = ++generation
-                work = imageExecutor.submit {
-                    val result = runCatching { writeMediaFile(context, loader.getContent(source)) }
-                    mainHandler.post {
-                        if (token != generation || !isAttachedToWindow) { result.getOrNull()?.delete(); return@post }
-                        work = null
-                        result.fold({ loaded -> file = loaded; video.setVideoURI(Uri.fromFile(loaded)); video.start() },
-                            { play.setText(R.string.tmark_media_unavailable); onError?.invoke(it) })
-                    }
-                }
+    }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (loop && previewLoaded && file == null) startLoop()
+        syncPlayback()
+    }
+    private fun startLoop() {
+        val playerView = video ?: return
+        if (work != null || file != null) return
+        val token = ++generation
+        work = imageExecutor.submit {
+            val result = runCatching { writeMediaFile(context, loader.getContent(source)) }
+            mainHandler.post {
+                if (token != generation || !isAttachedToWindow) { result.getOrNull()?.delete(); return@post }
+                work = null
+                result.fold({ loaded -> file = loaded; playerView.setVideoURI(Uri.fromFile(loaded)) }, onError ?: {})
             }
         }
     }
     override fun onDetachedFromWindow() {
         generation++; work?.cancel(true); work = null
-        position = video.currentPosition; video.stopPlayback(); prepared = false
+        video?.stopPlayback(); video?.visibility = INVISIBLE; image.visibility = VISIBLE
         file?.delete(); file = null
         super.onDetachedFromWindow()
     }
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
-        if (visibility != View.VISIBLE) video.pause()
+        syncPlayback()
     }
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
-        if (visibility != View.VISIBLE) video.pause()
+        syncPlayback()
+    }
+    private fun syncPlayback() {
+        val playerView = video ?: return
+        if (playerView.visibility != VISIBLE) return
+        if (isShown && windowVisibility == View.VISIBLE) playerView.start() else playerView.pause()
+    }
+}
+
+private fun showVideoDialog(context: Context, source: String, loader: MediaContentLoader, onError: ((Throwable) -> Unit)?) {
+    val dialog = Dialog(context)
+    val content = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
+    val video = VideoView(context)
+    val loading = ProgressBar(context)
+    val error = MaterialTextView(context).apply {
+        setText(R.string.tmark_media_unavailable)
+        setTextColor(Color.WHITE)
+        visibility = View.GONE
+    }
+    val close = MaterialButton(context).apply {
+        setText(R.string.tmark_close)
+        setOnClickListener { dialog.dismiss() }
+    }
+    content.addView(video, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, android.view.Gravity.CENTER))
+    content.addView(loading, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+    content.addView(error, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+    content.addView(close, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.TOP or android.view.Gravity.END))
+    var work: Future<*>? = null
+    var file: java.io.File? = null
+    var dismissed = false
+    dialog.setOnDismissListener {
+        dismissed = true
+        work?.cancel(true)
+        video.stopPlayback()
+        file?.delete()
+    }
+    fun showError(cause: Throwable) {
+        loading.visibility = View.GONE
+        error.visibility = View.VISIBLE
+        onError?.invoke(cause)
+    }
+    video.setMediaController(MediaController(context).apply { setAnchorView(video) })
+    var videoWidth = 0
+    var videoHeight = 0
+    fun centerVideo() {
+        if (videoWidth <= 0 || videoHeight <= 0 || content.width <= 0 || content.height <= 0) return
+        val scale = minOf(content.width.toFloat() / videoWidth, content.height.toFloat() / videoHeight)
+        video.layoutParams = FrameLayout.LayoutParams(
+            maxOf(1, (videoWidth * scale).toInt()),
+            maxOf(1, (videoHeight * scale).toInt()),
+            android.view.Gravity.CENTER,
+        )
+    }
+    content.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+        if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) centerVideo()
+    }
+    video.setOnPreparedListener { player ->
+        videoWidth = player.videoWidth
+        videoHeight = player.videoHeight
+        loading.visibility = View.GONE
+        centerVideo()
+        video.start()
+    }
+    video.setOnErrorListener { _, what, extra ->
+        showError(IllegalStateException("Video error $what/$extra"))
+        true
+    }
+    dialog.setContentView(content)
+    dialog.show()
+    dialog.window?.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
+    work = imageExecutor.submit {
+        val result = runCatching { writeMediaFile(context, loader.getContent(source)) }
+        mainHandler.post {
+            if (dismissed) { result.getOrNull()?.delete(); return@post }
+            result.fold({ loaded -> file = loaded; video.setVideoURI(Uri.fromFile(loaded)) }, ::showError)
+        }
     }
 }
 
 @SuppressLint("ViewConstructor") // Internal, programmatically constructed widgets.
 internal class NativeAudioView(context: Context, private val source: String, private val loader: MediaContentLoader,
                                private val onError: ((Throwable) -> Unit)?) : LinearLayout(context) {
-    private val play = audioButton(R.drawable.tmark_audio_play, R.string.tmark_play).apply {
-        val primary = MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary)
-        val onPrimary = MaterialColors.getColor(this, MaterialR.attr.colorOnPrimary)
-        imageTintList = ColorStateList.valueOf(onPrimary)
-        background = RippleDrawable(
-            ColorStateList.valueOf((onPrimary and 0x00ffffff) or 0x33000000),
-            GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(primary)
-            },
-            GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE) },
-        )
-    }
+    private val play = circularPlayButton(context)
     private val elapsed = MaterialTextView(context).apply { text = "0:00"; setTextAppearance(MaterialR.style.TextAppearance_Material3_BodyLarge) }
     private val progress = LinearProgressIndicator(context).apply {
         max = 1000
@@ -363,7 +459,7 @@ internal class NativeAudioView(context: Context, private val source: String, pri
         isFocusable = true
     }
     private val duration = MaterialTextView(context).apply { text = "0:00"; setTextAppearance(MaterialR.style.TextAppearance_Material3_BodyLarge) }
-    private val more = audioButton(R.drawable.tmark_audio_more, R.string.tmark_audio_more)
+    private val more = mediaIconButton(context, R.drawable.tmark_audio_more, R.string.tmark_audio_more)
     private var player: MediaPlayer? = null
     private var ready = false
     private var pendingPlay = false
@@ -461,15 +557,6 @@ internal class NativeAudioView(context: Context, private val source: String, pri
         }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
-    private fun audioButton(icon: Int, label: Int) = ImageButton(context).apply {
-        setImageDrawable(AppCompatResources.getDrawable(context, icon))
-        imageTintList = ColorStateList.valueOf(MaterialColors.getColor(this, MaterialR.attr.colorOnSurface))
-        contentDescription = context.getString(label)
-        scaleType = ImageView.ScaleType.CENTER
-        val ripple = TypedValue()
-        context.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)
-        setBackgroundResource(ripple.resourceId)
-    }
     private fun updatePlayIcon(playing: Boolean) {
         play.setImageResource(if (playing) R.drawable.tmark_audio_pause else R.drawable.tmark_audio_play)
         play.contentDescription = context.getString(if (playing) R.string.tmark_pause else R.string.tmark_play)

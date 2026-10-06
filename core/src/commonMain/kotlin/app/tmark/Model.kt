@@ -453,17 +453,23 @@ data class ImageNode(
 }
 
 data class VideoNode(
+    val preview: String,
     val src: String = "",
     val caption: Caption? = null,
-    val hasSpoiler: Boolean = false
+    val hasSpoiler: Boolean = false,
+    val loop: Boolean = false
 ) : BlockNode, GalleryNode {
     companion object : NodeType<VideoNode>(VideoNode::class, "video") {
         val caption = optional("caption", FieldTypes.record(Caption), VideoNode::caption)
         val hasSpoiler = field("has_spoiler", FieldTypes.boolean, VideoNode::hasSpoiler) { false }
+        val preview = field("preview", FieldTypes.string, VideoNode::preview)
+        val loop = field("loop", FieldTypes.boolean, VideoNode::loop) { false }
         val src = content(FieldTypes.string, VideoNode::src) { "" }
         override fun create(values: FieldValues) = VideoNode(
             caption = values[caption],
             hasSpoiler = values[hasSpoiler],
+            preview = values[preview],
+            loop = values[loop],
             src = values[src],
         )
     }

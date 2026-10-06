@@ -93,7 +93,7 @@ internal fun SlideshowPager(
     }
 }
 
-/** Sizes the pager from the tallest image at the available width, capped at 420 dp. */
+/** Sizes the pager from image and video previews at the available width, capped at 420 dp. */
 internal class SlideshowSizeFrame(
     context: android.content.Context,
     private val imageSources: List<String?>,

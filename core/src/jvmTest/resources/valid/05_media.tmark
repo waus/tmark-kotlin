@@ -4,6 +4,6 @@
 {slideshow;
 #caption{#credit{Photo}Trip}
 {img;#has_spoiler{t}photo.jpg}
-{video;#caption{Clip}clip.mp4}
+{video;#caption{Clip}#preview{photo.jpg}clip.mp4}
 }
 }

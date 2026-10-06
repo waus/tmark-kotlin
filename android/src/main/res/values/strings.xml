@@ -10,6 +10,7 @@
     <string name="tmark_open_map">Open map: %1$s, %2$s</string>
     <string name="tmark_media_unavailable">Media unavailable</string>
     <string name="tmark_play">Play</string>
+    <string name="tmark_close">Close</string>
     <string name="tmark_pause">Pause</string>
     <string name="tmark_audio_seek">Seek audio</string>
     <string name="tmark_audio_seek_position">Seek audio, %1$s of %2$s</string>

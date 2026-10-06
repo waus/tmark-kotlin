@@ -240,7 +240,7 @@ class TmarkViewTest {
         val view = TmarkView(context).apply { config = TmarkConfig(showDocumentHeader = true) }
         view.render(Document(description = "description", content = listOf(
             ImageNode(caption = caption("image")),
-            VideoNode(caption = caption("video")),
+            VideoNode(preview = "preview.png", caption = caption("video")),
             AudioNode(caption = caption("audio")),
             Collage(caption = caption("collage")),
             Slideshow(caption = caption("slideshow")),

@@ -31,8 +31,8 @@ class TmarkTest {
             Paragraph(rich), Header(2, rich), Preformatted("val x = 1", "kotlin"), MathBlock("x^2"), Anchor("a"), Divider,
             Blockquote(listOf(Paragraph(rich)), rich), PullQuote(rich, rich),
             ListBlock(listOf(ListItem(listOf(Paragraph(rich)), "A", 3, false))),
-            MapBlock(55.75, 37.61, 12, cap), ImageNode("a.png", cap, true), VideoNode("v.mp4", cap, true), AudioNode("a.mp3", cap),
-            Collage(listOf(ImageNode(src = "a.png")), cap), Slideshow(listOf(VideoNode(src = "v.mp4")), cap),
+            MapBlock(55.75, 37.61, 12, cap), ImageNode("a.png", cap, true), VideoNode("preview.png", "v.mp4", cap, true, true), AudioNode("a.mp3", cap),
+            Collage(listOf(ImageNode(src = "a.png")), cap), Slideshow(listOf(VideoNode(preview = "preview.png", src = "v.mp4")), cap),
             Table(listOf(TableRow(listOf(Cell(rich, true, 2, 3, TableCellAlign.right, TableCellValign.bottom)))), rich, true, true),
             Details(listOf(Paragraph(rich), Divider), rich, true)
         )
@@ -60,6 +60,10 @@ class TmarkTest {
         assertEquals(Document(), Tmark.decode("{document;\n}"))
         assertFailsWith<TmarkException> { Tmark.decode("{h;}") }
         assertEquals(ImageNode(), Tmark.decode("{img;}"))
+        assertFailsWith<TmarkException> { Tmark.decode("{video;clip.mp4}") }
+        assertEquals(VideoNode(preview = "cover.png", src = "clip.mp4"), Tmark.decode("{video;#preview{cover.png}clip.mp4}"))
+        assertEquals(VideoNode(preview = "cover.png", src = "clip.mp4", loop = true), Tmark.decode("{video;#preview{cover.png}#loop{t}clip.mp4}"))
+        assertEquals("{video;#preview{cover.png}#loop{t}clip.mp4}", Tmark.encode(VideoNode(preview = "cover.png", src = "clip.mp4", loop = true)))
         assertEquals(ListItem(checked = false), Tmark.decode("{li;#checked{f}}"))
     }
     @Test fun tableSpansAvoidCollisions() {
