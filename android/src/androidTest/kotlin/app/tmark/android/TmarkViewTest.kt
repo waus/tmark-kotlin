@@ -33,6 +33,40 @@ class TmarkViewTest {
         text.getSpans(0, text.length, ClickableSpan::class.java).first().onClick(view)
     }
 
+    @Test fun datetimeDefaultsToUtcAndRejectsUnknownTimezones() = ui {
+        val format = TmarkConfig().formatDateTime
+        assertEquals(format(DateTimeNode(0, "UTC")), format(DateTimeNode(0)))
+        for (zone in listOf("Local", "localtime", "posixrules", "Unknown/Zone", "PST", "CST", "IST", "MSK", "GMT+03:00", "GMT+2", "gmt+2", "utc+2", "gmt", "utc", "z", "+24:00", "+00:60", "+2:00", "+0200",
+            "UTC+24", "UTC+2:3", "UTC+002", "UTC+2:", "UTC+", "UTC+2\n", " UTC", "utc",
+            "+٠٢:00", "posix/UTC", "right/UTC", "/etc/localtime", "EST5EDT,M3.2.0,M11.1.0")) {
+            assertTrue(runCatching { format(DateTimeNode(0, zone)) }.isFailure)
+            var error: Throwable? = null
+            val view = TmarkView(context).apply { config = TmarkConfig(onError = { error = it }) }
+            view.render(Document(content = listOf(Paragraph(listOf(DateTimeNode(0, zone))))))
+            assertEquals("0 ($zone)", texts(view).single().text.toString())
+            assertNotNull(error)
+        }
+        assertNotEquals(format(DateTimeNode(0, "UTC")), format(DateTimeNode(0, "Europe/Moscow")))
+    }
+
+    @Test fun datetimeFixedOffsetsAndIanaDaylightSaving() {
+        val format = TmarkConfig().formatDateTime
+        for ((zone, minutes) in listOf("+02:30" to 150, "-03:30" to -210, "UTC+2" to 120,
+            "UTC-3:30" to -210, "UTC+02:30" to 150, "Z" to 0, "GMT" to 0, "GMT0" to 0, "Etc/GMT+2" to -120, "-00:00" to 0,
+            "+23:59" to 1439, "-23:59" to -1439)) {
+            for (unix in listOf(1705320000L, 1721044800L)) {
+                val expected = java.text.DateFormat.getDateTimeInstance().apply {
+                    timeZone = java.util.SimpleTimeZone(minutes * 60_000, zone)
+                }.format(java.util.Date(unix * 1000))
+                assertEquals(zone, expected, format(DateTimeNode(unix, zone)))
+            }
+        }
+        for ((unix, zone) in listOf(1705320000L to "UTC-5", 1721044800L to "UTC-4")) {
+            assertEquals(format(DateTimeNode(unix, zone)), format(DateTimeNode(unix, "America/New_York")))
+            assertEquals(format(DateTimeNode(unix, zone)), format(DateTimeNode(unix, "US/Eastern")))
+        }
+    }
+
     @Test fun mediaFormatsAreDetectedFromBytes() {
         val assets = instrumentation.context.assets
         fun sample(name: String) = assets.open("media/$name").use { it.readBytes() }

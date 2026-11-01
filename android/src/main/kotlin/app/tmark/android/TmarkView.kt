@@ -458,7 +458,10 @@ class TmarkView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
                 is Reference -> { children(node.children); if (owner != null) references[node.name] = owner }
                 is Code -> { out.append(node.text); span(TypefaceSpan("monospace")) }
                 is Math -> { out.append(node.expression); span(TypefaceSpan("monospace")) }
-                is DateTimeNode -> out.append(runCatching { config.formatDateTime(node) }.getOrElse { config.onError?.invoke(it); node.unix.toString() })
+                is DateTimeNode -> out.append(runCatching { config.formatDateTime(node) }.getOrElse {
+                    config.onError?.invoke(it)
+                    "${node.unix} (${node.timezone.ifEmpty { "UTC" }})"
+                })
                 is Icon -> {
                     val size = owner?.textSize?.toInt() ?: dp(18)
                     val fallback = "[${node.alternativeText?.takeIf { it.isNotBlank() } ?: context.getString(R.string.tmark_icon)}]"
